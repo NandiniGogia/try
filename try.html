@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AddSub Virtual Try-On (3D)</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 0;
+    }
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      pointer-events: none; /* keep clicks on video */
+    }
+  </style>
+</head>
+<body>
+  <!-- Webcam feed as background -->
+  <video id="video" autoplay playsinline muted></video>
+  <!-- 3D overlay -->
+  <canvas id="overlay"></canvas>
+
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/loaders/GLTFLoader.js"></script>
+
+  <!-- Mediapipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <script>
+    const videoElement = document.getElementById("video");
+    const overlay = document.getElementById("overlay");
+
+    overlay.width = window.innerWidth;
+    overlay.height = window.innerHeight;
+
+    // Three.js setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, overlay.width / overlay.height, 0.1, 1000);
+    camera.position.z = 2;
+
+    const renderer = new THREE.WebGLRenderer({ canvas: overlay, alpha: true });
+    renderer.setClearColor(0x000000, 0); // transparent
+    renderer.setSize(overlay.width, overlay.height);
+
+    const light = new THREE.AmbientLight(0xffffff, 1);
+    scene.add(light);
+
+    let specs3D = null;
+
+    // Load 3D specs model
+    const loader = new THREE.GLTFLoader();
+    loader.load("specmodel.gltf", (gltf) => {
+      specs3D = gltf.scene;
+      specs3D.scale.set(0.3, 0.3, 0.3);
+      scene.add(specs3D);
+    });
+
+    // FaceMesh
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    faceMesh.onResults(onResults);
+
+    const cam = new Camera(videoElement, {
+      onFrame: async () => {
+        await faceMesh.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480
+    });
+    cam.start();
+
+    function onResults(results) {
+      if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
+      const landmarks = results.multiFaceLandmarks[0];
+
+      // Eyes
+      const leftEye = landmarks[33];
+      const rightEye = landmarks[263];
+
+      const lx = leftEye.x * 2 - 1;
+      const ly = -(leftEye.y * 2 - 1);
+      const rx = rightEye.x * 2 - 1;
+      const ry = -(rightEye.y * 2 - 1);
+
+      const cx = (lx + rx) / 2;
+      const cy = (ly + ry) / 2;
+      const eyeDist = Math.hypot(rx - lx, ry - ly);
+
+      if (specs3D) {
+        specs3D.position.set(cx, cy, -1.5);
+        const scale = eyeDist * 2;
+        specs3D.scale.set(scale, scale, scale);
+        const angle = Math.atan2(ry - ly, rx - lx);
+        specs3D.rotation.set(0, 0, -angle);
+      }
+
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AddSub Virtual Try-On</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1620248257/camera_utils.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #F5F5F5 0%, #e8f4f8 100%);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(90deg, #1B3B5F 0%, #3DB2FF 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.active {
+            background: #44ff44;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            position: relative;
+        }
+
+        .video-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+        }
+
+        #videoElement {
+            max-width: 100%;
+            max-height: 100%;
+            transform: scaleX(-1);
+            border-radius: 10px;
+        }
+
+        #canvas3d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+
+        .controls-panel {
+            width: 320px;
+            background: white;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            box-shadow: -2px 0 15px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+
+        .control-group {
+            background: #F5F5F5;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .control-title {
+            color: #1B3B5F;
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .model-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .model-option {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            color: #1B3B5F;
+        }
+
+        .model-option:hover {
+            border-color: #3DB2FF;
+            transform: translateY(-2px);
+        }
+
+        .model-option.active {
+            border-color: #3DB2FF;
+            background: linear-gradient(135deg, #3DB2FF, #1B3B5F);
+            color: white;
+        }
+
+        .slider-container {
+            margin: 10px 0;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            color: #1B3B5F;
+            font-size: 14px;
+        }
+
+        .slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #e0e0e0;
+            outline: none;
+            appearance: none;
+            cursor: pointer;
+        }
+
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3DB2FF, #1B3B5F);
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3DB2FF, #1B3B5F);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(61, 178, 255, 0.3);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #1B3B5F;
+            border: 2px solid #3DB2FF;
+        }
+
+        .btn-secondary:hover {
+            background: #3DB2FF;
+            color: white;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 2000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #3DB2FF;
+            border-top: 3px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ff4444;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px;
+            text-align: center;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .controls-panel {
+                width: 100%;
+                height: 200px;
+                padding: 15px;
+            }
+            
+            .model-selector {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            
+            .control-group {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <div>Initializing Virtual Try-On...</div>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <header class="header">
+            <div class="logo">AddSub Eyewear</div>
+            <div class="status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Initializing...</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="video-container">
+                <video id="videoElement" autoplay muted playsinline></video>
+                <canvas id="canvas3d"></canvas>
+            </div>
+
+            <div class="controls-panel">
+                <div class="control-group">
+                    <div class="control-title">Frame Models</div>
+                    <div class="model-selector">
+                        <div class="model-option active" data-model="classic">Classic</div>
+                        <div class="model-option" data-model="sport">Sport</div>
+                        <div class="model-option" data-model="vintage">Vintage</div>
+                        <div class="model-option" data-model="modern">Modern</div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-title">Fit Adjustments</div>
+                    
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Scale</span>
+                            <span id="scaleValue">1.0</span>
+                        </div>
+                        <input type="range" class="slider" id="scaleSlider" min="0.7" max="1.3" step="0.05" value="1.0">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Position Y</span>
+                            <span id="posYValue">0</span>
+                        </div>
+                        <input type="range" class="slider" id="posYSlider" min="-20" max="20" step="1" value="0">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Rotation</span>
+                            <span id="rotationValue">0°</span>
+                        </div>
+                        <input type="range" class="slider" id="rotationSlider" min="-15" max="15" step="1" value="0">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-title">Actions</div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" id="captureBtn">
+                            📸 Capture Photo
+                        </button>
+                        <button class="btn btn-secondary" id="resetBtn">
+                            🔄 Reset Position
+                        </button>
+                        <button class="btn btn-secondary" id="toggleGlassesBtn">
+                            👓 Toggle Glasses
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class VirtualTryOn {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.glasses = null;
+                this.glassesModel = null;
+                this.faceMesh = null;
+                this.videoElement = null;
+                this.canvas3d = null;
+                this.gltfLoader = null;
+                
+                this.faceDetected = false;
+                this.glassesVisible = true;
+                this.currentModel = 'classic';
+                this.modelLoaded = false;
+                
+                // Adjustment values
+                this.scale = 1.0;
+                this.positionY = 0;
+                this.rotation = 0;
+                
+                // Store original GLTF data
+                this.gltfData = {
+                    "accessors": [
+                        {
+                            "bufferView": 2,
+                            "componentType": 5126,
+                            "count": 21530,
+                            "max": [21.484085083007813, 0.5870097875595093, 10.942009925842285],
+                            "min": [-19.505722045898438, -0.019378820434212685, -3.6952426433563232],
+                            "type": "VEC3"
+                        },
+                        {
+                            "bufferView": 2,
+                            "byteOffset": 258360,
+                            "componentType": 5126,
+                            "count": 21530,
+                            "max": [0.9999998807907104, 1.0, 1.0],
+                            "min": [-1.0, -1.0, -0.9999999403953552],
+                            "type": "VEC3"
+                        },
+                        {
+                            "bufferView": 1,
+                            "componentType": 5126,
+                            "count": 21530,
+                            "max": [1.0000001192092896, 1.000000238418579],
+                            "min": [0.0, 0.0],
+                            "type": "VEC2"
+                        },
+                        {
+                            "bufferView": 0,
+                            "componentType": 5125,
+                            "count": 82335,
+                            "type": "SCALAR"
+                        }
+                    ],
+                    "asset": {
+                        "generator": "Sketchfab-12.68.0",
+                        "version": "2.0"
+                    },
+                    "materials": [
+                        {
+                            "doubleSided": true,
+                            "name": "Material.001",
+                            "pbrMetallicRoughness": {
+                                "baseColorFactor": [0.0, 0.0, 0.0, 1.0],
+                                "metallicFactor": 0.36652043850208854,
+                                "roughnessFactor": 0.29298986435133667
+                            }
+                        },
+                        {
+                            "alphaMode": "BLEND",
+                            "doubleSided": true,
+                            "name": "glass",
+                            "pbrMetallicRoughness": {
+                                "baseColorFactor": [1.0, 1.0, 1.0, 0.12331351196882087],
+                                "roughnessFactor": 0.7246821589478869
+                            }
+                        }
+                    ]
+                };
+                
+                this.init();
+            }
+
+            async init() {
+                try {
+                    await this.setupCamera();
+                    this.setupThreeJS();
+                    await this.loadGLTFModel();
+                    this.setupFaceMesh();
+                    this.setupEventListeners();
+                    this.hideLoading();
+                    this.updateStatus('Ready', true);
+                } catch (error) {
+                    this.showError('Failed to initialize: ' + error.message);
+                    this.hideLoading();
+                }
+            }
+
+            async setupCamera() {
+                this.videoElement = document.getElementById('videoElement');
+                this.canvas3d = document.getElementById('canvas3d');
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    }
+                });
+
+                this.videoElement.srcObject = stream;
+                return new Promise((resolve) => {
+                    this.videoElement.onloadedmetadata = () => {
+                        resolve();
+                    };
+                });
+            }
+
+            setupThreeJS() {
+                const container = document.querySelector('.video-container');
+                const rect = container.getBoundingClientRect();
+
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, rect.width / rect.height, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: this.canvas3d,
+                    alpha: true,
+                    antialias: true
+                });
+
+                this.renderer.setSize(rect.width, rect.height);
+                this.renderer.setClearColor(0x000000, 0);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                // Lighting setup for realistic rendering
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+                this.scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(5, 10, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                this.scene.add(directionalLight);
+
+                // Additional lighting for glasses
+                const frontLight = new THREE.DirectionalLight(0xffffff, 0.3);
+                frontLight.position.set(0, 0, 10);
+                this.scene.add(frontLight);
+
+                this.camera.position.z = 5;
+
+                // Initialize GLTF Loader
+                this.gltfLoader = new THREE.GLTFLoader();
+
+                // Handle resize
+                window.addEventListener('resize', () => {
+                    const newRect = container.getBoundingClientRect();
+                    this.camera.aspect = newRect.width / newRect.height;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(newRect.width, newRect.height);
+                });
+            }
+
+            async loadGLTFModel() {
+                try {
+                    // Create a procedural glasses model as fallback
+                    this.createFallbackGlasses();
+                    
+                    // In a real implementation, you would load the GLTF file like this:
+                    // const gltf = await this.loadGLTF('path/to/scene.gltf');
+                    // this.processLoadedModel(gltf);
+                    
+                    this.modelLoaded = true;
+                    this.updateStatus('Model loaded', true);
+                    
+                    // Start render loop
+                    this.animate();
+                } catch (error) {
+                    console.error('Error loading GLTF model:', error);
+                    this.createFallbackGlasses();
+                    this.animate();
+                }
+            }
+
+            loadGLTF(url) {
+                return new Promise((resolve, reject) => {
+                    this.gltfLoader.load(
+                        url,
+                        (gltf) => resolve(gltf),
+                        (progress) => {
+                            console.log('Loading progress:', progress);
+                        },
+                        (error) => reject(error)
+                    );
+                });
+            }
+
+            processLoadedModel(gltf) {
+                const model = gltf.scene;
+                
+                // Scale and position the model appropriately
+                model.scale.set(0.1, 0.1, 0.1);
+                model.position.set(0, 0, 0);
+                
+                // Traverse the model to find and enhance materials
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        // Enable shadows
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        // Enhance materials based on the GLTF data
+                        if (child.material) {
+                            if (child.material.name === 'glass') {
+                                // Glass material enhancements
+                                child.material.transparent = true;
+                                child.material.opacity = 0.15;
+                                child.material.metalness = 0.1;
+                                child.material.roughness = 0.1;
+                                child.material.envMapIntensity = 1.0;
+                            } else if (child.material.name === 'Material.001') {
+                                // Frame material enhancements
+                                child.material.metalness = 0.4;
+                                child.material.roughness = 0.3;
+                                child.material.color.setHex(0x333333);
+                            }
+                        }
+                    }
+                });
+
+                // Replace the fallback with the loaded model
+                if (this.glasses) {
+                    this.scene.remove(this.glasses);
+                }
+                
+                this.glasses = model;
+                this.glassesModel = model;
+                this.scene.add(this.glasses);
+            }
+
+            createFallbackGlasses() {
+                // Enhanced procedural glasses based on the GLTF model structure
+                const glassesGroup = new THREE.Group();
+
+                // Frame material (matching GLTF Material.001)
+                const frameMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x1B3B5F,  // AddSub brand color
+                    metalness: 0.4,
+                    roughness: 0.3,
+                    shininess: 60
+                });
+
+                // Glass material (matching GLTF glass material)
+                const lensMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.15,
+                    metalness: 0.1,
+                    roughness: 0.1,
+                    shininess: 100
+                });
+
+                // Left lens frame with more detail
+                const leftFrameGeometry = new THREE.TorusGeometry(0.35, 0.025, 12, 32);
+                const leftFrame = new THREE.Mesh(leftFrameGeometry, frameMaterial);
+                leftFrame.position.set(-0.42, 0, 0);
+                leftFrame.castShadow = true;
+                glassesGroup.add(leftFrame);
+
+                // Right lens frame
+                const rightFrameGeometry = new THREE.TorusGeometry(0.35, 0.025, 12, 32);
+                const rightFrame = new THREE.Mesh(rightFrameGeometry, frameMaterial);
+                rightFrame.position.set(0.42, 0, 0);
+                rightFrame.castShadow = true;
+                glassesGroup.add(rightFrame);
+
+                // Left lens
+                const leftLensGeometry = new THREE.CircleGeometry(0.32, 32);
+                const leftLens = new THREE.Mesh(leftLensGeometry, lensMaterial);
+                leftLens.position.set(-0.42, 0, 0.01);
+                glassesGroup.add(leftLens);
+
+                // Right lens
+                const rightLensGeometry = new THREE.CircleGeometry(0.32, 32);
+                const rightLens = new THREE.Mesh(rightLensGeometry, lensMaterial);
+                rightLens.position.set(0.42, 0, 0.01);
+                glassesGroup.add(rightLens);
+
+                // Bridge
+                const bridgeGeometry = new THREE.CylinderGeometry(0.015, 0.015, 0.16, 16);
+                const bridge = new THREE.Mesh(bridgeGeometry, frameMaterial);
+                bridge.rotation.z = Math.PI / 2;
+                bridge.position.set(0, 0.05, 0);
+                bridge.castShadow = true;
+                glassesGroup.add(bridge);
+
+                // Nose pads
+                const nosePadGeometry = new THREE.SphereGeometry(0.02, 8, 8);
+                const nosePadMaterial = new THREE.MeshPhongMaterial({ color: 0x888888 });
+                
+                const leftNosePad = new THREE.Mesh(nosePadGeometry, nosePadMaterial);
+                leftNosePad.position.set(-0.08, -0.05, 0.03);
+                glassesGroup.add(leftNosePad);
+                
+                const rightNosePad = new THREE.Mesh(nosePadGeometry, nosePadMaterial);
+                rightNosePad.position.set(0.08, -0.05, 0.03);
+                glassesGroup.add(rightNosePad);
+
+                // Temples with more realistic design
+                const templeGeometry = new THREE.CylinderGeometry(0.015, 0.012, 1.0, 12);
+                
+                const leftTemple = new THREE.Mesh(templeGeometry, frameMaterial);
+                leftTemple.rotation.z = Math.PI / 2;
+                leftTemple.rotation.y = -0.1;
+                leftTemple.position.set(-0.8, 0, -0.25);
+                leftTemple.castShadow = true;
+                glassesGroup.add(leftTemple);
+
+                const rightTemple = new THREE.Mesh(templeGeometry, frameMaterial);
+                rightTemple.rotation.z = Math.PI / 2;
+                rightTemple.rotation.y = 0.1;
+                rightTemple.position.set(0.8, 0, -0.25);
+                rightTemple.castShadow = true;
+                glassesGroup.add(rightTemple);
+
+                // Temple tips
+                const tipGeometry = new THREE.SphereGeometry(0.02, 8, 8);
+                const tipMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+                
+                const leftTip = new THREE.Mesh(tipGeometry, tipMaterial);
+                leftTip.position.set(-1.3, 0, -0.25);
+                glassesGroup.add(leftTip);
+                
+                const rightTip = new THREE.Mesh(tipGeometry, tipMaterial);
+                rightTip.position.set(1.3, 0, -0.25);
+                glassesGroup.add(rightTip);
+
+                this.glasses = glassesGroup;
+                this.scene.add(this.glasses);
+            }
+
+            setupFaceMesh() {
+                this.faceMesh = new FaceMesh({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`;
+                    }
+                });
+
+                this.faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                this.faceMesh.onResults((results) => {
+                    this.onFaceResults(results);
+                });
+
+                const cameraHelper = new Camera(this.videoElement, {
+                    onFrame: async () => {
+                        await this.faceMesh.send({ image: this.videoElement });
+                    },
+                    width: 1280,
+                    height: 720
+                });
+
+                cameraHelper.start();
+            }
+
+            onFaceResults(results) {
+                if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                    if (!this.faceDetected) {
+                        this.faceDetected = true;
+                        this.updateStatus('Face Detected', true);
+                    }
+
+                    const landmarks = results.multiFaceLandmarks[0];
+                    this.updateGlassesPosition(landmarks);
+                } else {
+                    if (this.faceDetected) {
+                        this.faceDetected = false;
+                        this.updateStatus('Searching for face...', false);
+                    }
+                }
+            }
+
+            updateGlassesPosition(landmarks) {
+                if (!this.glasses || !this.glassesVisible) return;
+
+                // Key facial landmarks
+                const leftEye = landmarks[33];   // Left eye center
+                const rightEye = landmarks[263]; // Right eye center
+                const noseTip = landmarks[1];    // Nose tip
+                const leftEyeCorner = landmarks[133];
+                const rightEyeCorner = landmarks[362];
+
+                // Calculate center position between eyes
+                const eyeCenterX = (leftEye.x + rightEye.x) / 2;
+                const eyeCenterY = (leftEye.y + rightEye.y) / 2;
+                const eyeCenterZ = (leftEye.z + rightEye.z) / 2;
+
+                // Calculate distance between eyes for scaling
+                const eyeDistance = Math.sqrt(
+                    Math.pow(rightEye.x - leftEye.x, 2) + 
+                    Math.pow(rightEye.y - leftEye.y, 2)
+                );
+
+                // Map video coordinates to 3D space
+                const videoRect = this.videoElement.getBoundingClientRect();
+                const canvasRect = this.canvas3d.getBoundingClientRect();
+
+                // Convert normalized coordinates to 3D space
+                const x = (eyeCenterX - 0.5) * 8; // Scale to reasonable 3D space
+                const y = -(eyeCenterY - 0.5) * 6 + (this.positionY * 0.1); // Invert Y and add adjustment
+                const z = eyeCenterZ * 10;
+
+                // Apply transformations
+                this.glasses.position.set(x, y, z);
+                
+                // Scale based on eye distance and user adjustment
+                const baseScale = eyeDistance * 15 * this.scale;
+                this.glasses.scale.set(baseScale, baseScale, baseScale);
+
+                // Calculate rotation based on eye alignment
+                const eyeAngle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+                this.glasses.rotation.z = eyeAngle + (this.rotation * Math.PI / 180);
+
+                // Slight forward tilt for realism
+                this.glasses.rotation.x = -0.1;
+            }
+
+            updateGlassesModel(modelType) {
+                if (!this.glasses) return;
+
+                // Remove existing glasses
+                this.scene.remove(this.glasses);
+                
+                // Update material based on model type
+                let frameColor = 0x333333;
+                let lensOpacity = 0.2;
+
+                switch(modelType) {
+                    case 'sport':
+                        frameColor = 0xff4444;
+                        lensOpacity = 0.3;
+                        break;
+                    case 'vintage':
+                        frameColor = 0x8B4513;
+                        lensOpacity = 0.1;
+                        break;
+                    case 'modern':
+                        frameColor = 0x1B3B5F;
+                        lensOpacity = 0.25;
+                        break;
+                    default:
+                        frameColor = 0x333333;
+                        lensOpacity = 0.2;
+                }
+
+                // Recreate glasses with new style
+                this.createGlassesWithStyle(frameColor, lensOpacity);
+                this.currentModel = modelType;
+            }
+
+            createGlassesWithStyle(frameColor, lensOpacity) {
+                const glassesGroup = new THREE.Group();
+
+                const frameMaterial = new THREE.MeshPhongMaterial({ 
+                    color: frameColor,
+                    shininess: 30
+                });
+
+                const lensMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x87CEEB,
+                    transparent: true,
+                    opacity: lensOpacity,
+                    shininess: 100
+                });
+
+                // Create frames based on model type
+                if (this.currentModel === 'sport') {
+                    // Sport style - wraparound
+                    this.createSportGlasses(glassesGroup, frameMaterial, lensMaterial);
+                } else if (this.currentModel === 'vintage') {
+                    // Vintage style - round
+                    this.createVintageGlasses(glassesGroup, frameMaterial, lensMaterial);
+                } else {
+                    // Classic/Modern style
+                    this.createClassicGlasses(glassesGroup, frameMaterial, lensMaterial);
+                }
+
+                this.glasses = glassesGroup;
+                this.scene.add(this.glasses);
+            }
+
+            createClassicGlasses(group, frameMaterial, lensMaterial) {
+                // Left and right lens frames
+                const leftFrameGeometry = new THREE.TorusGeometry(0.4, 0.03, 8, 20);
+                const leftFrame = new THREE.Mesh(leftFrameGeometry, frameMaterial);
+                leftFrame.position.set(-0.5, 0, 0);
+                group.add(leftFrame);
+
+                const rightFrameGeometry = new THREE.TorusGeometry(0.4, 0.03, 8, 20);
+                const rightFrame = new THREE.Mesh(rightFrameGeometry, frameMaterial);
+                rightFrame.position.set(0.5, 0, 0);
+                group.add(rightFrame);
+
+                // Lenses
+                const leftLensGeometry = new THREE.CircleGeometry(0.37, 32);
+                const leftLens = new THREE.Mesh(leftLensGeometry, lensMaterial);
+                leftLens.position.set(-0.5, 0, 0.01);
+                group.add(leftLens);
+
+                const rightLensGeometry = new THREE.CircleGeometry(0.37, 32);
+                const rightLens = new THREE.Mesh(rightLensGeometry, lensMaterial);
+                rightLens.position.set(0.5, 0, 0.01);
+                group.add(rightLens);
+
+                // Bridge
+                const bridgeGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.2, 8);
+                const bridge = new THREE.Mesh(bridgeGeometry, frameMaterial);
+                bridge.rotation.z = Math.PI / 2;
+                bridge.position.set(0, 0, 0);
+                group.add(bridge);
+
+                // Temples
+                const templeGeometry = new THREE.CylinderGeometry(0.02, 0.02, 1.2, 8);
+                
+                const leftTemple = new THREE.Mesh(templeGeometry, frameMaterial);
+                leftTemple.rotation.z = Math.PI / 2;
+                leftTemple.position.set(-0.9, 0, -0.3);
+                group.add(leftTemple);
+
+                const rightTemple = new THREE.Mesh(templeGeometry, frameMaterial);
+                rightTemple.rotation.z = Math.PI / 2;
+                rightTemple.position.set(0.9, 0, -0.3);
+                group.add(rightTemple);
+            }
+
+            createSportGlasses(group, frameMaterial, lensMaterial) {
+                // Single wraparound lens
+                const lensGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1.2, 32, 1, false, 0, Math.PI);
+                const lens = new THREE.Mesh(lensGeometry, lensMaterial);
+                lens.rotation.x = Math.PI / 2;
+                lens.position.set(0, 0, 0.2);
+                group.add(lens);
+
+                // Frame around lens
+                const frameGeometry = new THREE.TorusGeometry(0.5, 0.02, 8, 32, Math.PI);
+                const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+                frame.rotation.x = Math.PI / 2;
+                frame.position.set(0, -0.1, 0.2);
+                group.add(frame);
+
+                // Temple attachments
+                const templeGeometry = new THREE.CylinderGeometry(0.02, 0.02, 1.0, 8);
+                
+                const leftTemple = new THREE.Mesh(templeGeometry, frameMaterial);
+                leftTemple.rotation.z = Math.PI / 2;
+                leftTemple.position.set(-0.8, 0, -0.2);
+                group.add(leftTemple);
+
+                const rightTemple = new THREE.Mesh(templeGeometry, frameMaterial);
+                rightTemple.rotation.z = Math.PI / 2;
+                rightTemple.position.set(0.8, 0, -0.2);
+                group.add(rightTemple);
+            }
+
+            createVintageGlasses(group, frameMaterial, lensMaterial) {
+                // Round frames
+                const leftFrameGeometry = new THREE.TorusGeometry(0.35, 0.04, 6, 16);
+                const leftFrame = new THREE.Mesh(leftFrameGeometry, frameMaterial);
+                leftFrame.position.set(-0.45, 0, 0);
+                group.add(leftFrame);
+
+                const rightFrameGeometry = new THREE.TorusGeometry(0.35, 0.04, 6, 16);
+                const rightFrame = new THREE.Mesh(rightFrameGeometry, frameMaterial);
+                rightFrame.position.set(0.45, 0, 0);
+                group.add(rightFrame);
+
+                // Round lenses
+                const leftLensGeometry = new THREE.CircleGeometry(0.32, 32);
+                const leftLens = new THREE.Mesh(leftLensGeometry, lensMaterial);
+                leftLens.position.set(-0.45, 0, 0.01);
+                group.add(leftLens);
+
+                const rightLensGeometry = new THREE.CircleGeometry(0.32, 32);
+                const rightLens = new THREE.Mesh(rightLensGeometry, lensMaterial);
+                rightLens.position.set(0.45, 0, 0.01);
+                group.add(rightLens);
+
+                // Thicker bridge
+                const bridgeGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.15, 8);
+                const bridge = new THREE.Mesh(bridgeGeometry, frameMaterial);
+                bridge.rotation.z = Math.PI / 2;
+                bridge.position.set(0, 0, 0);
+                group.add(bridge);
+
+                // Vintage-style temples
+                const templeGeometry = new THREE.CylinderGeometry(0.025, 0.025, 1.1, 8);
+                
+                const leftTemple = new THREE.Mesh(templeGeometry, frameMaterial);
+                leftTemple.rotation.z = Math.PI / 2;
+                leftTemple.position.set(-0.85, 0, -0.25);
+                group.add(leftTemple);
+
+                const rightTemple = new THREE.Mesh(templeGeometry, frameMaterial);
+                rightTemple.rotation.z = Math.PI / 2;
+                rightTemple.position.set(0.85, 0, -0.25);
+                group.add(rightTemple);
+            }
+
+            setupEventListeners() {
+                // Model selection
+                document.querySelectorAll('.model-option').forEach(option => {
+                    option.addEventListener('click', (e) => {
+                        document.querySelector('.model-option.active').classList.remove('active');
+                        e.target.classList.add('active');
+                        const modelType = e.target.dataset.model;
+                        this.updateGlassesModel(modelType);
+                    });
+                });
+
+                // Scale slider
+                const scaleSlider = document.getElementById('scaleSlider');
+                const scaleValue = document.getElementById('scaleValue');
+                scaleSlider.addEventListener('input', (e) => {
+                    this.scale = parseFloat(e.target.value);
+                    scaleValue.textContent = this.scale.toFixed(1);
+                });
+
+                // Position Y slider
+                const posYSlider = document.getElementById('posYSlider');
+                const posYValue = document.getElementById('posYValue');
+                posYSlider.addEventListener('input', (e) => {
+                    this.positionY = parseFloat(e.target.value);
+                    posYValue.textContent = this.positionY;
+                });
+
+                // Rotation slider
+                const rotationSlider = document.getElementById('rotationSlider');
+                const rotationValue = document.getElementById('rotationValue');
+                rotationSlider.addEventListener('input', (e) => {
+                    this.rotation = parseFloat(e.target.value);
+                    rotationValue.textContent = this.rotation + '°';
+                });
+
+                // Capture button
+                document.getElementById('captureBtn').addEventListener('click', () => {
+                    this.capturePhoto();
+                });
+
+                // Reset button
+                document.getElementById('resetBtn').addEventListener('click', () => {
+                    this.resetPosition();
+                });
+
+                // Toggle glasses button
+                document.getElementById('toggleGlassesBtn').addEventListener('click', () => {
+                    this.toggleGlasses();
+                });
+            }
+
+            capturePhoto() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const video = this.videoElement;
+
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                // Draw video frame
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+                ctx.scale(-1, 1);
+
+                // Create download link
+                canvas.toBlob((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `addsub-tryson-${Date.now()}.png`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }, 'image/png');
+
+                // Visual feedback
+                const captureBtn = document.getElementById('captureBtn');
+                const originalText = captureBtn.innerHTML;
+                captureBtn.innerHTML = '✅ Captured!';
+                captureBtn.style.background = '#44ff44';
+                
+                setTimeout(() => {
+                    captureBtn.innerHTML = originalText;
+                    captureBtn.style.background = '';
+                }, 2000);
+            }
+
+            resetPosition() {
+                this.scale = 1.0;
+                this.positionY = 0;
+                this.rotation = 0;
+
+                document.getElementById('scaleSlider').value = 1.0;
+                document.getElementById('scaleValue').textContent = '1.0';
+                document.getElementById('posYSlider').value = 0;
+                document.getElementById('posYValue').textContent = '0';
+                document.getElementById('rotationSlider').value = 0;
+                document.getElementById('rotationValue').textContent = '0°';
+            }
+
+            toggleGlasses() {
+                this.glassesVisible = !this.glassesVisible;
+                if (this.glasses) {
+                    this.glasses.visible = this.glassesVisible;
+                }
+
+                const toggleBtn = document.getElementById('toggleGlassesBtn');
+                toggleBtn.innerHTML = this.glassesVisible ? '👓 Hide Glasses' : '👓 Show Glasses';
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            updateStatus(message, isActive) {
+                const statusText = document.getElementById('statusText');
+                const statusDot = document.getElementById('statusDot');
+                
+                statusText.textContent = message;
+                if (isActive) {
+                    statusDot.classList.add('active');
+                } else {
+                    statusDot.classList.remove('active');
+                }
+            }
+
+            showError(message) {
+                const errorElement = document.getElementById('errorMessage');
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+                setTimeout(() => {
+                    errorElement.style.display = 'none';
+                }, 5000);
+            }
+
+            hideLoading() {
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                loadingOverlay.style.display = 'none';
+            }
+        }
+
+        // Initialize the virtual try-on when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check for required features
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                document.getElementById('errorMessage').textContent = 'Camera access is not supported in this browser';
+                document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return;
+            }
+
+            if (!window.THREE) {
+                document.getElementById('errorMessage').textContent = 'WebGL is not supported in this browser';
+                document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return;
+            }
+
+            // Initialize the virtual try-on system
+            new VirtualTryOn();
+        });
+
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                // Pause processing when tab is not visible to save resources
+                console.log('Page hidden - pausing processing');
+            } else {
+                console.log('Page visible - resuming processing');
+            }
+        });
+    </script>
+</body>
+</html>
