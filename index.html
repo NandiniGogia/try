@@ -1,787 +1,203 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AddSub Virtual Try-On</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .logo h1 {
-            font-size: 2.5rem;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-            margin-bottom: 5px;
-        }
-
-        .logo span {
-            font-size: 1.2rem;
-            color: #f0f0f0;
-            font-weight: 300;
-        }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-
-        @media (max-width: 768px) {
-            .main-content {
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
-        }
-
-        .video-container {
-            position: relative;
-            background: #000;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            aspect-ratio: 4/3;
-        }
-
-        #videoElement {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        #outputCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 2;
-        }
-
-        .loading,
-        .error-message {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            color: white;
-            z-index: 10;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .controls-panel {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            height: fit-content;
-        }
-
-        .control-group {
-            margin-bottom: 25px;
-        }
-
-        .control-group h3 {
-            margin-bottom: 15px;
-            color: #333;
-            font-weight: 600;
-        }
-
-        .frame-selector {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .frame-btn {
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            background: white;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
-
-        .frame-btn:hover {
-            border-color: #667eea;
-            background: #f8f9ff;
-        }
-
-        .frame-btn.active {
-            border-color: #667eea;
-            background: #667eea;
-            color: white;
-        }
-
-        .slider-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .slider-group label {
-            min-width: 100px;
-            font-weight: 500;
-        }
-
-        .slider-group input[type="range"] {
-            flex: 1;
-            height: 6px;
-            background: #e0e0e0;
-            border-radius: 3px;
-            outline: none;
-            cursor: pointer;
-        }
-
-        .slider-group span {
-            min-width: 40px;
-            text-align: center;
-            font-weight: 600;
-            color: #667eea;
-        }
-
-        .action-btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            margin-bottom: 10px;
-        }
-
-        .action-btn.primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .action-btn.primary:hover {
-            background: #5a6fd8;
-            transform: translateY(-2px);
-        }
-
-        .footer {
-            text-align: center;
-            color: white;
-            opacity: 0.8;
-        }
-
-        .debug-info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            z-index: 5;
-        }
-
-        .image-upload {
-            margin-bottom: 15px;
-        }
-
-        .upload-btn {
-            width: 100%;
-            padding: 10px;
-            background: #f8f9ff;
-            border: 2px dashed #667eea;
-            border-radius: 8px;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .upload-btn:hover {
-            background: #f0f0ff;
-        }
-
-        .upload-btn input {
-            display: none;
-        }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Virtual Glasses Try-On (PNG + GLB)</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; margin: 0; }
+    header { padding: 20px; }
+    .camera-container { position: relative; display: inline-block; }
+    video, canvas { border-radius: 10px; }
+    #overlay { position: absolute; left: 0; top: 0; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+    #three-container { display: none; margin: auto; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <div class="logo">
-                <h1>AddSub</h1>
-                <span>Virtual Try-On</span>
-            </div>
-        </header>
+  <header>
+    <h1>Virtual Glasses Try-On</h1>
+    <p>Switch between PNG overlay and 3D GLB model</p>
+  </header>
 
-        <main class="main-content">
-            <div class="video-container">
-                <video id="videoElement" autoplay muted playsinline></video>
-                <canvas id="outputCanvas"></canvas>
-                
-                <div id="debugInfo" class="debug-info" style="display: none;">
-                    <div>Status: <span id="status">Initializing...</span></div>
-                    <div>Face Detected: <span id="faceDetected">No</span></div>
-                    <div>Glasses Visible: <span id="glassesVisible">No</span></div>
-                    <div>Current Frame: <span id="currentFrameDebug">classic</span></div>
-                </div>
-                
-                <div id="loadingIndicator" class="loading">
-                    <div class="spinner"></div>
-                    <p>Initializing camera and face detection...</p>
-                </div>
+  <div class="controls">
+    <button id="startBtn">🎥 Start Camera</button>
+    <button id="stopBtn" disabled>⏹️ Stop Camera</button>
+    <button id="toggleModeBtn">Switch to 3D GLB</button>
+  </div>
 
-                <div id="errorMessage" class="error-message" style="display: none;">
-                    <p>Camera access denied or not available. Please enable camera access and refresh the page.</p>
-                    <button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Retry
-                    </button>
-                </div>
-            </div>
+  <div class="camera-container">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
 
-            <div class="controls-panel">
-                <div class="control-group">
-                    <h3>Upload Custom Glasses</h3>
-                    <div class="image-upload">
-                        <label for="glassesUpload" class="upload-btn">
-                            <span>📁 Upload PNG Image</span>
-                            <input type="file" id="glassesUpload" accept="image/png,image/jpg,image/jpeg,image/gif">
-                        </label>
-                    </div>
-                </div>
+  <div id="three-container" style="width:640px; height:480px;"></div>
 
-                <div class="control-group">
-                    <h3>Frame Selection</h3>
-                    <div class="frame-selector">
-                        <button class="frame-btn active" data-frame="classic">Classic</button>
-                        <button class="frame-btn" data-frame="modern">Modern</button>
-                        <button class="frame-btn" data-frame="vintage">Vintage</button>
-                        <button class="frame-btn" data-frame="aviator">Aviator</button>
-                    </div>
-                </div>
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
-                <div class="control-group">
-                    <h3>Adjustments</h3>
-                    <div class="slider-group">
-                        <label for="sizeSlider">Size</label>
-                        <input type="range" id="sizeSlider" min="0.5" max="3.0" step="0.1" value="1.0">
-                        <span id="sizeValue">1.0</span>
-                    </div>
-                    <div class="slider-group">
-                        <label for="widthSlider">Width</label>
-                        <input type="range" id="widthSlider" min="0.5" max="3.0" step="0.1" value="1.0">
-                        <span id="widthValue">1.0</span>
-                    </div>
-                    <div class="slider-group">
-                        <label for="heightSlider">Height</label>
-                        <input type="range" id="heightSlider" min="-0.2" max="0.2" step="0.01" value="0">
-                        <span id="heightValue">0.0</span>
-                    </div>
-                    <div class="slider-group">
-                        <label for="rotationSlider">Rotation</label>
-                        <input type="range" id="rotationSlider" min="-30" max="30" step="1" value="0">
-                        <span id="rotationValue">0°</span>
-                    </div>
-                </div>
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/loaders/GLTFLoader.js"></script>
 
-                <div class="control-group">
-                    <h3>Actions</h3>
-                    <button id="toggleDebug" class="action-btn primary">
-                        Show Debug Info
-                    </button>
-                    <button id="resetBtn" class="action-btn primary">
-                        Reset Settings
-                    </button>
-                    <button id="captureBtn" class="action-btn primary">
-                        📸 Capture Photo
-                    </button>
-                </div>
-            </div>
-        </main>
+  <script>
+    let faceMesh, camera, canvas, ctx;
+    let glassesImg = new Image();
+    glassesImg.src = "a2ec560f-b602-41d6-baa5-0241e9f78513.png"; // your PNG specs
 
-        <footer class="footer">
-            <p>&copy; 2025 AddSub. All rights reserved.</p>
-        </footer>
-    </div>
+    let is3DMode = false; // toggle state
+    let scene, camera3D, renderer, glassesModel;
 
-    <script>
-        class PNGVirtualTryOn {
-            constructor() {
-                this.video = null;
-                this.canvas = null;
-                this.ctx = null;
-                this.faceMesh = null;
-                this.camera = null;
-                this.isInitialized = false;
-                this.faceDetected = false;
-                this.currentFrame = 'classic';
-                this.customImage = null;
-                this.scale = 1.0;
-                this.width = 1.0;
-                this.height = 0.0;
-                this.rotation = 0.0;
-                this.debugMode = false;
-                
-                // Pre-loaded glasses images
-                this.glassesImages = new Map();
-                this.loadDefaultGlasses();
-            }
+    async function init() {
+      const video = document.getElementById('video');
+      canvas = document.getElementById('overlay');
+      ctx = canvas.getContext('2d');
 
-            loadDefaultGlasses() {
-                // Load default glasses images
-                const frames = ['classic', 'modern', 'vintage', 'aviator'];
-                frames.forEach(frame => {
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    // You can replace these with your actual PNG files
-                    img.src = `glasses/${frame}.png`;
-                    img.onload = () => {
-                        this.glassesImages.set(frame, img);
-                        console.log(`Loaded ${frame} glasses`);
-                    };
-                    img.onerror = () => {
-                        console.log(`Failed to load ${frame} glasses, using fallback`);
-                        // Create a simple fallback image
-                        this.createFallbackImage(frame);
-                    };
-                });
-            }
+      function resizeCanvas() {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+      }
 
-            createFallbackImage(frame) {
-                // Create a simple canvas-based glasses image as fallback
-                const canvas = document.createElement('canvas');
-                canvas.width = 400;
-                canvas.height = 200;
-                const ctx = canvas.getContext('2d');
-                
-                // Draw simple glasses
-                ctx.strokeStyle = this.getFrameColor(frame);
-                ctx.lineWidth = 8;
-                ctx.fillStyle = 'rgba(135, 206, 235, 0.1)';
-                
-                // Left lens
-                ctx.beginPath();
-                ctx.arc(120, 100, 60, 0, 2 * Math.PI);
-                ctx.fill();
-                ctx.stroke();
-                
-                // Right lens
-                ctx.beginPath();
-                ctx.arc(280, 100, 60, 0, 2 * Math.PI);
-                ctx.fill();
-                ctx.stroke();
-                
-                // Bridge
-                ctx.beginPath();
-                ctx.moveTo(180, 80);
-                ctx.lineTo(220, 80);
-                ctx.stroke();
-                
-                // Convert to image
-                const img = new Image();
-                img.src = canvas.toDataURL();
-                this.glassesImages.set(frame, img);
-            }
+      faceMesh = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+      });
 
-            getFrameColor(frame) {
-                switch (frame) {
-                    case 'classic': return '#333333';
-                    case 'modern': return '#000000';
-                    case 'vintage': return '#8B4513';
-                    case 'aviator': return '#FFD700';
-                    default: return '#333333';
-                }
-            }
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
 
-            async init() {
-                try {
-                    this.updateStatus('Getting video elements...');
-                    this.setupElements();
-                    
-                    this.updateStatus('Requesting camera access...');
-                    await this.setupCamera();
-                    
-                    this.updateStatus('Initializing face detection...');
-                    await this.setupFaceDetection();
-                    
-                    this.updateStatus('Setting up controls...');
-                    this.setupControls();
-                    
-                    this.updateStatus('Ready!');
-                    this.hideLoading();
-                    this.isInitialized = true;
-                    
-                    console.log('PNG Virtual try-on initialized successfully');
-                } catch (error) {
-                    console.error('Initialization failed:', error);
-                    this.showError(error.message);
-                }
-            }
+      faceMesh.onResults(onResults);
 
-            setupElements() {
-                this.video = document.getElementById('videoElement');
-                this.canvas = document.getElementById('outputCanvas');
-                this.ctx = this.canvas.getContext('2d');
-                
-                if (!this.video || !this.canvas) {
-                    throw new Error('Required elements not found');
-                }
-            }
+      camera = new Camera(video, {
+        onFrame: async () => {
+          await faceMesh.send({ image: video });
+        },
+        width: 640,
+        height: 480
+      });
 
-            async setupCamera() {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 },
-                            facingMode: 'user'
-                        }
-                    });
-                    
-                    this.video.srcObject = stream;
-                    
-                    return new Promise((resolve, reject) => {
-                        this.video.onloadedmetadata = () => {
-                            this.resizeCanvas();
-                            resolve();
-                        };
-                        this.video.onerror = reject;
-                    });
-                } catch (error) {
-                    throw new Error('Camera access denied or not available');
-                }
-            }
+      document.getElementById("startBtn").onclick = async () => {
+        await camera.start();
+        resizeCanvas();
+        document.getElementById("startBtn").disabled = true;
+        document.getElementById("stopBtn").disabled = false;
+      };
 
-            async setupFaceDetection() {
-                try {
-                    this.faceMesh = new FaceMesh({
-                        locateFile: (file) => {
-                            return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-                        }
-                    });
+      document.getElementById("stopBtn").onclick = () => {
+        camera.stop();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById("startBtn").disabled = false;
+        document.getElementById("stopBtn").disabled = true;
+      };
 
-                    this.faceMesh.setOptions({
-                        maxNumFaces: 1,
-                        refineLandmarks: true,
-                        minDetectionConfidence: 0.5,
-                        minTrackingConfidence: 0.5
-                    });
+      document.getElementById("toggleModeBtn").onclick = () => {
+        is3DMode = !is3DMode;
+        document.getElementById("overlay").style.display = is3DMode ? "none" : "block";
+        document.getElementById("three-container").style.display = is3DMode ? "block" : "none";
+        document.getElementById("toggleModeBtn").innerText = is3DMode ? "Switch to PNG Overlay" : "Switch to 3D GLB";
+      };
 
-                    this.faceMesh.onResults((results) => {
-                        this.onFaceResults(results);
-                    });
+      window.addEventListener("resize", resizeCanvas);
 
-                    this.camera = new Camera(this.video, {
-                        onFrame: async () => {
-                            await this.faceMesh.send({ image: this.video });
-                        },
-                        width: 1280,
-                        height: 720
-                    });
+      initThree(); // init 3D scene
+      animateThree();
+    }
 
-                    await this.camera.start();
-                } catch (error) {
-                    throw new Error('Face detection initialization failed: ' + error.message);
-                }
-            }
+    function onResults(results) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            onFaceResults(results) {
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-                    this.faceDetected = true;
-                    this.updateDebugInfo('faceDetected', 'Yes');
-                    
-                    const landmarks = results.multiFaceLandmarks[0];
-                    this.drawGlassesImage(landmarks);
-                } else {
-                    this.faceDetected = false;
-                    this.updateDebugInfo('faceDetected', 'No');
-                }
-                
-                this.updateDebugInfo('glassesVisible', this.faceDetected ? 'Yes' : 'No');
-            }
+      if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
+      const landmarks = results.multiFaceLandmarks[0];
 
-            drawGlassesImage(landmarks) {
-                // Get the current glasses image
-                let glassesImg = this.customImage || this.glassesImages.get(this.currentFrame);
-                
-                if (!glassesImg) {
-                    console.log('No glasses image available');
-                    return;
-                }
+      if (is3DMode) {
+        updateGlasses3D(landmarks);
+      } else {
+        drawGlassesPNG(landmarks);
+      }
+    }
 
-                // Get key landmarks
-                const leftEye = landmarks[33];   // Left eye outer corner
-                const rightEye = landmarks[263]; // Right eye outer corner
-                const noseBridge = landmarks[9]; // Nose bridge
-                
-                if (!leftEye || !rightEye || !noseBridge) return;
+    // ---------------- PNG Overlay Mode ----------------
+    function drawGlassesPNG(landmarks) {
+      const leftEye = landmarks[33];
+      const rightEye = landmarks[263];
+      const nose = landmarks[168];
 
-                // Convert to canvas coordinates
-                const leftEyeX = leftEye.x * this.canvas.width;
-                const leftEyeY = leftEye.y * this.canvas.height;
-                const rightEyeX = rightEye.x * this.canvas.width;
-                const rightEyeY = rightEye.y * this.canvas.height;
+      const eyeDist = Math.sqrt(
+        Math.pow((rightEye.x - leftEye.x) * canvas.width, 2) +
+        Math.pow((rightEye.y - leftEye.y) * canvas.height, 2)
+      );
 
-                // Calculate glasses parameters
-                const eyeDistance = Math.sqrt(
-                    Math.pow(rightEyeX - leftEyeX, 2) + Math.pow(rightEyeY - leftEyeY, 2)
-                );
-                
-                const centerX = (leftEyeX + rightEyeX) / 2;
-                const centerY = (leftEyeY + rightEyeY) / 2 + (this.height * eyeDistance);
-                
-                // Calculate angle based on eyes
-                const faceAngle = Math.atan2(rightEyeY - leftEyeY, rightEyeX - leftEyeX);
-                const totalAngle = faceAngle + (this.rotation * Math.PI / 180);
-                
-                // Calculate size
-                const glassesWidth = eyeDistance * 2.5 * this.width * this.scale;
-                const glassesHeight = (glassesWidth * glassesImg.height) / glassesImg.width;
-                
-                // Draw the glasses image
-                this.ctx.save();
-                this.ctx.translate(centerX, centerY);
-                this.ctx.rotate(totalAngle);
-                
-                this.ctx.drawImage(
-                    glassesImg,
-                    -glassesWidth / 2,
-                    -glassesHeight / 2,
-                    glassesWidth,
-                    glassesHeight
-                );
-                
-                this.ctx.restore();
-            }
+      const centerX = ((leftEye.x + rightEye.x) / 2) * canvas.width;
+      const centerY = ((leftEye.y + rightEye.y) / 2) * canvas.height;
 
-            setupControls() {
-                // Custom image upload
-                document.getElementById('glassesUpload').addEventListener('change', (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                            const img = new Image();
-                            img.onload = () => {
-                                this.customImage = img;
-                                this.currentFrame = 'custom';
-                                this.updateDebugInfo('currentFrameDebug', 'Custom Image');
-                                console.log('Custom glasses image loaded');
-                            };
-                            img.src = event.target.result;
-                        };
-                        reader.readAsDataURL(file);
-                    }
-                });
+      const dx = (rightEye.x - leftEye.x) * canvas.width;
+      const dy = (rightEye.y - leftEye.y) * canvas.height;
+      const rotation = Math.atan2(dy, dx);
 
-                // Frame selection
-                document.querySelectorAll('.frame-btn').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        document.querySelectorAll('.frame-btn').forEach(b => b.classList.remove('active'));
-                        btn.classList.add('active');
-                        this.currentFrame = btn.dataset.frame;
-                        this.customImage = null; // Clear custom image when selecting preset
-                        this.updateDebugInfo('currentFrameDebug', this.currentFrame);
-                    });
-                });
+      const scale = (eyeDist * 2.0) / 220; // adjust scaling
+      const scaledWidth = 220 * scale;
+      const scaledHeight = 65 * scale;
 
-                // Sliders
-                document.getElementById('sizeSlider').addEventListener('input', (e) => {
-                    this.scale = parseFloat(e.target.value);
-                    document.getElementById('sizeValue').textContent = this.scale.toFixed(1);
-                });
+      ctx.save();
+      ctx.translate(centerX, centerY + (nose.y * canvas.height - centerY) * 0.8);
+      ctx.rotate(rotation);
+      ctx.drawImage(glassesImg, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+      ctx.restore();
+    }
 
-                document.getElementById('widthSlider').addEventListener('input', (e) => {
-                    this.width = parseFloat(e.target.value);
-                    document.getElementById('widthValue').textContent = this.width.toFixed(1);
-                });
+    // ---------------- 3D GLB Mode ----------------
+    function initThree() {
+      const container = document.getElementById('three-container');
+      scene = new THREE.Scene();
+      camera3D = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer({ alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      container.appendChild(renderer.domElement);
 
-                document.getElementById('heightSlider').addEventListener('input', (e) => {
-                    this.height = parseFloat(e.target.value);
-                    document.getElementById('heightValue').textContent = this.height.toFixed(2);
-                });
+      const light = new THREE.HemisphereLight(0xffffff, 0x444444);
+      light.position.set(0, 200, 0);
+      scene.add(light);
 
-                document.getElementById('rotationSlider').addEventListener('input', (e) => {
-                    this.rotation = parseFloat(e.target.value);
-                    document.getElementById('rotationValue').textContent = this.rotation.toFixed(0) + '°';
-                });
+      const loader = new THREE.GLTFLoader();
+      loader.load("sun_glasses_fbx_346kb.glb", function(gltf) {
+        glassesModel = gltf.scene;
+        glassesModel.scale.set(0.01, 0.01, 0.01); // adjust to fit
+        scene.add(glassesModel);
+      });
 
-                // Debug toggle
-                document.getElementById('toggleDebug').addEventListener('click', () => {
-                    this.debugMode = !this.debugMode;
-                    const debugInfo = document.getElementById('debugInfo');
-                    const btn = document.getElementById('toggleDebug');
-                    
-                    if (this.debugMode) {
-                        debugInfo.style.display = 'block';
-                        btn.textContent = 'Hide Debug Info';
-                    } else {
-                        debugInfo.style.display = 'none';
-                        btn.textContent = 'Show Debug Info';
-                    }
-                });
+      camera3D.position.z = 2;
+    }
 
-                // Reset
-                document.getElementById('resetBtn').addEventListener('click', () => {
-                    this.scale = 1.0;
-                    this.width = 1.0;
-                    this.height = 0.0;
-                    this.rotation = 0.0;
-                    this.currentFrame = 'classic';
-                    this.customImage = null;
-                    
-                    document.getElementById('sizeSlider').value = '1.0';
-                    document.getElementById('widthSlider').value = '1.0';
-                    document.getElementById('heightSlider').value = '0';
-                    document.getElementById('rotationSlider').value = '0';
-                    document.getElementById('sizeValue').textContent = '1.0';
-                    document.getElementById('widthValue').textContent = '1.0';
-                    document.getElementById('heightValue').textContent = '0.0';
-                    document.getElementById('rotationValue').textContent = '0°';
-                    document.getElementById('glassesUpload').value = '';
-                    
-                    document.querySelectorAll('.frame-btn').forEach(b => b.classList.remove('active'));
-                    document.querySelector('[data-frame="classic"]').classList.add('active');
-                    
-                    this.updateDebugInfo('currentFrameDebug', 'classic');
-                });
+    function updateGlasses3D(landmarks) {
+      if (!glassesModel) return;
 
-                // Capture photo
-                document.getElementById('captureBtn').addEventListener('click', () => {
-                    this.capturePhoto();
-                });
+      const leftEye = landmarks[33];
+      const rightEye = landmarks[263];
+      const nose = landmarks[168];
 
-                // Resize handler
-                window.addEventListener('resize', () => {
-                    this.resizeCanvas();
-                });
-            }
+      const centerX = (leftEye.x + rightEye.x) / 2 - 0.5;
+      const centerY = -(nose.y - 0.5);
 
-            capturePhoto() {
-                const captureCanvas = document.createElement('canvas');
-                const ctx = captureCanvas.getContext('2d');
-                
-                captureCanvas.width = this.video.videoWidth || this.canvas.width;
-                captureCanvas.height = this.video.videoHeight || this.canvas.height;
-                
-                // Draw video frame
-                ctx.drawImage(this.video, 0, 0, captureCanvas.width, captureCanvas.height);
-                
-                // Draw glasses overlay (scaled to video size)
-                ctx.drawImage(this.canvas, 0, 0, captureCanvas.width, captureCanvas.height);
-                
-                // Create download link
-                const link = document.createElement('a');
-                link.download = `glasses-tryou-${Date.now()}.png`;
-                link.href = captureCanvas.toDataURL('image/png');
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                console.log('Photo captured and downloaded');
-            }
+      glassesModel.position.set(centerX, centerY, -1.5);
 
-            resizeCanvas() {
-                if (!this.video || !this.canvas) return;
-                
-                const container = this.video.parentElement;
-                const rect = container.getBoundingClientRect();
-                
-                this.canvas.width = rect.width;
-                this.canvas.height = rect.height;
-                this.canvas.style.width = rect.width + 'px';
-                this.canvas.style.height = rect.height + 'px';
-            }
+      const dx = rightEye.x - leftEye.x;
+      const dy = rightEye.y - leftEye.y;
+      const rotation = Math.atan2(dy, dx);
+      glassesModel.rotation.set(0, 0, -rotation);
+    }
 
-            updateStatus(status) {
-                this.updateDebugInfo('status', status);
-                console.log('Status:', status);
-            }
+    function animateThree() {
+      requestAnimationFrame(animateThree);
+      if (renderer && scene && camera3D) {
+        renderer.render(scene, camera3D);
+      }
+    }
 
-            updateDebugInfo(key, value) {
-                const element = document.getElementById(key);
-                if (element) {
-                    element.textContent = value;
-                }
-            }
-
-            hideLoading() {
-                const loading = document.getElementById('loadingIndicator');
-                if (loading) {
-                    loading.style.display = 'none';
-                }
-            }
-
-            showError(message) {
-                const loading = document.getElementById('loadingIndicator');
-                const error = document.getElementById('errorMessage');
-                
-                if (loading) loading.style.display = 'none';
-                if (error) {
-                    error.querySelector('p').textContent = message;
-                    error.style.display = 'block';
-                }
-            }
-        }
-
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', async () => {
-            const app = new PNGVirtualTryOn();
-            
-            try {
-                await app.init();
-            } catch (error) {
-                console.error('Failed to initialize virtual try-on:', error);
-            }
-        });
-    </script>
+    window.onload = init;
+  </script>
 </body>
 </html>
