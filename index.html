@@ -1,203 +1,463 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Virtual Glasses Try-On (PNG + GLB)</title>
-  <style>
-    body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; margin: 0; }
-    header { padding: 20px; }
-    .camera-container { position: relative; display: inline-block; }
-    video, canvas { border-radius: 10px; }
-    #overlay { position: absolute; left: 0; top: 0; }
-    button { margin: 10px; padding: 10px 20px; font-size: 16px; }
-    #three-container { display: none; margin: auto; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Spectacles Try-On</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            width: 100%;
+            max-width: 1200px;
+        }
+        
+        .camera-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        #output {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            width: 300px;
+        }
+        
+        .glass-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .glass-option {
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            opacity: 0.7;
+        }
+        
+        .glass-option:hover {
+            opacity: 0.9;
+            transform: scale(1.05);
+        }
+        
+        .glass-option.active {
+            opacity: 1;
+            border-color: white;
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+        }
+        
+        .glass-option img {
+            width: 100%;
+            height: 60px;
+            object-fit: contain;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        button {
+            background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 50px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .instructions {
+            margin-top: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 640px;
+        }
+        
+        .instructions h3 {
+            margin-bottom: 10px;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .status {
+            margin-top: 10px;
+            font-style: italic;
+            opacity: 0.8;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .camera-container {
+                width: 100%;
+                max-width: 100%;
+                height: auto;
+                aspect-ratio: 4/3;
+            }
+            
+            .controls {
+                width: 100%;
+                max-width: 100%;
+            }
+        }
+    </style>
 </head>
 <body>
-  <header>
-    <h1>Virtual Glasses Try-On</h1>
-    <p>Switch between PNG overlay and 3D GLB model</p>
-  </header>
+    <header>
+        <h1>Virtual Spectacles Try-On</h1>
+        <p class="subtitle">Try on different glasses virtually using your device's camera. See how they look in real-time!</p>
+    </header>
+    
+    <div class="container">
+        <div class="camera-container">
+            <video id="output" autoplay playsinline></video>
+            <canvas id="overlay"></canvas>
+        </div>
+        
+        <div class="controls">
+            <h3>Choose Your Style</h3>
+            <div class="glass-options">
+                <div class="glass-option active" data-glasses="glasses1">
+                    <img src="https://static.thenounproject.com/png/659803-200.png" alt="Classic Glasses">
+                </div>
+                <div class="glass-option" data-glasses="glasses2">
+                    <img src="https://static.thenounproject.com/png/659807-200.png" alt="Aviator Glasses">
+                </div>
+                <div class="glass-option" data-glasses="glasses3">
+                    <img src="https://static.thenounproject.com/png/659805-200.png" alt="Round Glasses">
+                </div>
+                <div class="glass-option" data-glasses="glasses4">
+                    <img src="https://static.thenounproject.com/png/659804-200.png" alt="Square Glasses">
+                </div>
+            </div>
+            
+            <button id="startButton">Start Camera</button>
+            <button id="stopButton">Stop Camera</button>
+            
+            <div class="status" id="status">Camera not started</div>
+        </div>
+    </div>
+    
+    <div class="instructions">
+        <h3>How to Use:</h3>
+        <ul>
+            <li>Click "Start Camera" to begin (you'll need to allow camera access)</li>
+            <li>Position your face in the frame so it's clearly visible</li>
+            <li>Select different glasses styles to see how they look on you</li>
+            <li>Move your head to see how the glasses adjust with your movement</li>
+            <li>Click "Stop Camera" when you're finished</li>
+        </ul>
+    </div>
 
-  <div class="controls">
-    <button id="startBtn">🎥 Start Camera</button>
-    <button id="stopBtn" disabled>⏹️ Stop Camera</button>
-    <button id="toggleModeBtn">Switch to 3D GLB</button>
-  </div>
-
-  <div class="camera-container">
-    <video id="video" autoplay playsinline></video>
-    <canvas id="overlay"></canvas>
-  </div>
-
-  <div id="three-container" style="width:640px; height:480px;"></div>
-
-  <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-
-  <!-- Three.js -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/loaders/GLTFLoader.js"></script>
-
-  <script>
-    let faceMesh, camera, canvas, ctx;
-    let glassesImg = new Image();
-    glassesImg.src = "a2ec560f-b602-41d6-baa5-0241e9f78513.png"; // your PNG specs
-
-    let is3DMode = false; // toggle state
-    let scene, camera3D, renderer, glassesModel;
-
-    async function init() {
-      const video = document.getElementById('video');
-      canvas = document.getElementById('overlay');
-      ctx = canvas.getContext('2d');
-
-      function resizeCanvas() {
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
-      }
-
-      faceMesh = new FaceMesh({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-      });
-
-      faceMesh.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-      });
-
-      faceMesh.onResults(onResults);
-
-      camera = new Camera(video, {
-        onFrame: async () => {
-          await faceMesh.send({ image: video });
-        },
-        width: 640,
-        height: 480
-      });
-
-      document.getElementById("startBtn").onclick = async () => {
-        await camera.start();
-        resizeCanvas();
-        document.getElementById("startBtn").disabled = true;
-        document.getElementById("stopBtn").disabled = false;
-      };
-
-      document.getElementById("stopBtn").onclick = () => {
-        camera.stop();
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        document.getElementById("startBtn").disabled = false;
-        document.getElementById("stopBtn").disabled = true;
-      };
-
-      document.getElementById("toggleModeBtn").onclick = () => {
-        is3DMode = !is3DMode;
-        document.getElementById("overlay").style.display = is3DMode ? "none" : "block";
-        document.getElementById("three-container").style.display = is3DMode ? "block" : "none";
-        document.getElementById("toggleModeBtn").innerText = is3DMode ? "Switch to PNG Overlay" : "Switch to 3D GLB";
-      };
-
-      window.addEventListener("resize", resizeCanvas);
-
-      initThree(); // init 3D scene
-      animateThree();
-    }
-
-    function onResults(results) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
-      const landmarks = results.multiFaceLandmarks[0];
-
-      if (is3DMode) {
-        updateGlasses3D(landmarks);
-      } else {
-        drawGlassesPNG(landmarks);
-      }
-    }
-
-    // ---------------- PNG Overlay Mode ----------------
-    function drawGlassesPNG(landmarks) {
-      const leftEye = landmarks[33];
-      const rightEye = landmarks[263];
-      const nose = landmarks[168];
-
-      const eyeDist = Math.sqrt(
-        Math.pow((rightEye.x - leftEye.x) * canvas.width, 2) +
-        Math.pow((rightEye.y - leftEye.y) * canvas.height, 2)
-      );
-
-      const centerX = ((leftEye.x + rightEye.x) / 2) * canvas.width;
-      const centerY = ((leftEye.y + rightEye.y) / 2) * canvas.height;
-
-      const dx = (rightEye.x - leftEye.x) * canvas.width;
-      const dy = (rightEye.y - leftEye.y) * canvas.height;
-      const rotation = Math.atan2(dy, dx);
-
-      const scale = (eyeDist * 2.0) / 220; // adjust scaling
-      const scaledWidth = 220 * scale;
-      const scaledHeight = 65 * scale;
-
-      ctx.save();
-      ctx.translate(centerX, centerY + (nose.y * canvas.height - centerY) * 0.8);
-      ctx.rotate(rotation);
-      ctx.drawImage(glassesImg, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
-      ctx.restore();
-    }
-
-    // ---------------- 3D GLB Mode ----------------
-    function initThree() {
-      const container = document.getElementById('three-container');
-      scene = new THREE.Scene();
-      camera3D = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-      renderer = new THREE.WebGLRenderer({ alpha: true });
-      renderer.setSize(container.clientWidth, container.clientHeight);
-      container.appendChild(renderer.domElement);
-
-      const light = new THREE.HemisphereLight(0xffffff, 0x444444);
-      light.position.set(0, 200, 0);
-      scene.add(light);
-
-      const loader = new THREE.GLTFLoader();
-      loader.load("sun_glasses_fbx_346kb.glb", function(gltf) {
-        glassesModel = gltf.scene;
-        glassesModel.scale.set(0.01, 0.01, 0.01); // adjust to fit
-        scene.add(glassesModel);
-      });
-
-      camera3D.position.z = 2;
-    }
-
-    function updateGlasses3D(landmarks) {
-      if (!glassesModel) return;
-
-      const leftEye = landmarks[33];
-      const rightEye = landmarks[263];
-      const nose = landmarks[168];
-
-      const centerX = (leftEye.x + rightEye.x) / 2 - 0.5;
-      const centerY = -(nose.y - 0.5);
-
-      glassesModel.position.set(centerX, centerY, -1.5);
-
-      const dx = rightEye.x - leftEye.x;
-      const dy = rightEye.y - leftEye.y;
-      const rotation = Math.atan2(dy, dx);
-      glassesModel.rotation.set(0, 0, -rotation);
-    }
-
-    function animateThree() {
-      requestAnimationFrame(animateThree);
-      if (renderer && scene && camera3D) {
-        renderer.render(scene, camera3D);
-      }
-    }
-
-    window.onload = init;
-  </script>
+    <script>
+        // Global variables
+        let faceMesh;
+        let camera;
+        let canvas;
+        let ctx;
+        let currentGlasses = 'glasses1';
+        let isCameraOn = false;
+        let glassesImages = {};
+        
+        // Landmark indices for face features
+        const LANDMARK_INDICES = {
+            LEFT_EYE: [33, 133],
+            RIGHT_EYE: [362, 263],
+            NOSE_TIP: 1,
+            LEFT_TEMPLE: 127,
+            RIGHT_TEMPLE: 356
+        };
+        
+        // Preload glasses images
+        function preloadGlassesImages() {
+            const glassesUrls = {
+                glasses1: 'ChatGPT Image Aug 22, 2025, 11_57_30 PM.png',
+                glasses2: 'ChatGPT Image Aug 22, 2025, 11_57_30 PM.png',
+                glasses3: 'ChatGPT Image Aug 22, 2025, 11_57_30 PM.png',
+                glasses4: 'ChatGPT Image Aug 22, 2025, 11_57_30 PM.png'
+            };
+            
+            const promises = Object.entries(glassesUrls).map(([key, url]) => {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.onload = () => {
+                        glassesImages[key] = img;
+                        resolve();
+                    };
+                    img.onerror = reject;
+                    img.src = url;
+                });
+            });
+            
+            return Promise.all(promises);
+        }
+        
+        // Initialize FaceMesh
+        function initializeFaceMesh() {
+            faceMesh = new window.FaceMesh({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                }
+            });
+            
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            faceMesh.onResults(onFaceMeshResults);
+        }
+        
+        // Start the camera
+        async function startCamera() {
+            if (isCameraOn) return;
+            
+            try {
+                const videoElement = document.getElementById('output');
+                canvas = document.getElementById('overlay');
+                ctx = canvas.getContext('2d');
+                
+                // Set canvas dimensions to match video
+                canvas.width = videoElement.videoWidth || 640;
+                canvas.height = videoElement.videoHeight || 480;
+                
+                camera = new window.Camera(videoElement, {
+                    onFrame: async () => {
+                        if (faceMesh) {
+                            await faceMesh.send({image: videoElement});
+                        }
+                    },
+                    width: 640,
+                    height: 480
+                });
+                
+                await camera.start();
+                isCameraOn = true;
+                document.getElementById('status').textContent = 'Camera active - detecting face';
+            } catch (error) {
+                console.error('Error starting camera:', error);
+                document.getElementById('status').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        // Stop the camera
+        function stopCamera() {
+            if (camera) {
+                camera.stop();
+                isCameraOn = false;
+                
+                // Clear the canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                document.getElementById('status').textContent = 'Camera stopped';
+            }
+        }
+        
+        // Process FaceMesh results
+        function onFaceMeshResults(results) {
+            const videoElement = document.getElementById('output');
+            
+            // Update canvas dimensions if they've changed
+            if (canvas.width !== videoElement.videoWidth || canvas.height !== videoElement.videoHeight) {
+                canvas.width = videoElement.videoWidth;
+                canvas.height = videoElement.videoHeight;
+            }
+            
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                drawGlasses(landmarks);
+            }
+        }
+        
+        // Draw glasses on the face
+        function drawGlasses(landmarks) {
+            const leftEye = landmarks[LANDMARK_INDICES.LEFT_EYE[0]];
+            const rightEye = landmarks[LANDMARK_INDICES.RIGHT_EYE[0]];
+            const noseTip = landmarks[LANDMARK_INDICES.NOSE_TIP];
+            const leftTemple = landmarks[LANDMARK_INDICES.LEFT_TEMPLE];
+            const rightTemple = landmarks[LANDMARK_INDICES.RIGHT_TEMPLE];
+            
+            // Calculate position and size based on facial landmarks
+            const eyeDistance = Math.sqrt(
+                Math.pow(rightEye.x - leftEye.x, 2) + 
+                Math.pow(rightEye.y - leftEye.y, 2)
+            );
+            
+            // Calculate center point between eyes
+            const centerX = (leftEye.x + rightEye.x) / 2;
+            const centerY = (leftEye.y + rightEye.y) / 2;
+            
+            // Calculate angle of rotation based on eye positions
+            const angle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+            
+            // Calculate width based on distance between temples with some padding
+            const templeDistance = Math.sqrt(
+                Math.pow(rightTemple.x - leftTemple.x, 2) + 
+                Math.pow(rightTemple.y - leftTemple.y, 2)
+            );
+            
+            const glassesWidth = templeDistance * canvas.width * 1.4;
+            const glassesHeight = glassesWidth * 0.4; // Aspect ratio of glasses
+            
+            // Save the current context
+            ctx.save();
+            
+            // Translate to the center point between eyes
+            ctx.translate(centerX * canvas.width, centerY * canvas.height);
+            
+            // Rotate the context
+            ctx.rotate(angle);
+            
+            // Draw the glasses image
+            const glassesImg = glassesImages[currentGlasses];
+            if (glassesImg) {
+                ctx.drawImage(
+                    glassesImg,
+                    -glassesWidth / 2,
+                    -glassesHeight / 2,
+                    glassesWidth,
+                    glassesHeight
+                );
+            }
+            
+            // Restore the context
+            ctx.restore();
+        }
+        
+        // Set up event listeners
+        function setupEventListeners() {
+            document.getElementById('startButton').addEventListener('click', startCamera);
+            document.getElementById('stopButton').addEventListener('click', stopCamera);
+            
+            // Add event listeners for glass options
+            const glassOptions = document.querySelectorAll('.glass-option');
+            glassOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    // Remove active class from all options
+                    glassOptions.forEach(opt => opt.classList.remove('active'));
+                    
+                    // Add active class to clicked option
+                    option.classList.add('active');
+                    
+                    // Update current glasses
+                    currentGlasses = option.dataset.glasses;
+                });
+            });
+        }
+        
+        // Initialize the application
+        async function initializeApp() {
+            try {
+                document.getElementById('status').textContent = 'Loading glasses models...';
+                await preloadGlassesImages();
+                
+                document.getElementById('status').textContent = 'Initializing face detection...';
+                initializeFaceMesh();
+                
+                setupEventListeners();
+                
+                document.getElementById('status').textContent = 'Ready to start camera';
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                document.getElementById('status').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        // Start the app when the page loads
+        window.addEventListener('load', initializeApp);
+    </script>
 </body>
 </html>
