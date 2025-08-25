@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virtual Spectacles Try-On</title>
+    <title>3D Virtual Spectacles Try-On</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -17,7 +17,7 @@
         }
         
         body {
-            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            background: linear-gradient(135deg, #1a2a6c, #2a4b8c, #3a6bcc);
             color: white;
             min-height: 100vh;
             padding: 20px;
@@ -125,6 +125,40 @@
             background: rgba(255, 255, 255, 0.1);
         }
         
+        .adjustment-controls {
+            margin: 15px 0;
+        }
+        
+        .slider-container {
+            margin-bottom: 12px;
+        }
+        
+        .slider-container label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            border-radius: 3px;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4facfe;
+            cursor: pointer;
+        }
+        
         button {
             background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
             border: none;
@@ -191,8 +225,8 @@
 </head>
 <body>
     <header>
-        <h1>Virtual Spectacles Try-On</h1>
-        <p class="subtitle">Try on different glasses virtually using your device's camera. See how they look in real-time!</p>
+        <h1>3D Virtual Spectacles Try-On</h1>
+        <p class="subtitle">Advanced 3D glasses fitting with precise positioning and adjustable parameters</p>
     </header>
     
     <div class="container">
@@ -218,8 +252,25 @@
                 </div>
             </div>
             
+            <div class="adjustment-controls">
+                <h3>Fine Tuning</h3>
+                <div class="slider-container">
+                    <label for="sizeSlider">Glasses Size</label>
+                    <input type="range" id="sizeSlider" class="slider" min="0.8" max="1.2" step="0.05" value="1.0">
+                </div>
+                <div class="slider-container">
+                    <label for="verticalSlider">Vertical Position</label>
+                    <input type="range" id="verticalSlider" class="slider" min="-0.1" max="0.1" step="0.01" value="0.0">
+                </div>
+                <div class="slider-container">
+                    <label for="depthSlider">Depth Adjustment</label>
+                    <input type="range" id="depthSlider" class="slider" min="0.9" max="1.1" step="0.01" value="1.0">
+                </div>
+            </div>
+            
             <button id="startButton">Start Camera</button>
             <button id="stopButton">Stop Camera</button>
+            <button id="resetButton">Reset Adjustments</button>
             
             <div class="status" id="status">Camera not started</div>
         </div>
@@ -231,7 +282,9 @@
             <li>Click "Start Camera" to begin (you'll need to allow camera access)</li>
             <li>Position your face in the frame so it's clearly visible</li>
             <li>Select different glasses styles to see how they look on you</li>
+            <li>Use the sliders to fine-tune the glasses fit and position</li>
             <li>Move your head to see how the glasses adjust with your movement</li>
+            <li>Click "Reset Adjustments" if you need to return to default settings</li>
             <li>Click "Stop Camera" when you're finished</li>
         </ul>
     </div>
@@ -246,13 +299,28 @@
         let isCameraOn = false;
         let glassesImages = {};
         
-        // Landmark indices for face features
+        // Adjustment parameters with default values
+        let adjustmentParams = {
+            size: 1.0,
+            vertical: 0.0,
+            depth: 1.0
+        };
+        
+        // Landmark indices for face features (more precise for 3D positioning)
         const LANDMARK_INDICES = {
-            LEFT_EYE: [33, 133],
-            RIGHT_EYE: [362, 263],
+            LEFT_EYE: [33, 133, 160, 159, 158, 144, 145, 153],  // Left eye outline
+            RIGHT_EYE: [362, 263, 387, 386, 385, 373, 374, 380], // Right eye outline
+            LEFT_EYE_CENTER: 468,
+            RIGHT_EYE_CENTER: 473,
             NOSE_TIP: 1,
+            NOSE_BOTTOM: 2,
             LEFT_TEMPLE: 127,
-            RIGHT_TEMPLE: 356
+            RIGHT_TEMPLE: 356,
+            FOREHEAD: 10,
+            LEFT_EAR: 234,
+            RIGHT_EAR: 454,
+            FACE_OVAL: [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 
+                        397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136]
         };
         
         // Preload glasses images
@@ -359,38 +427,69 @@
             if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
                 const landmarks = results.multiFaceLandmarks[0];
                 drawGlasses(landmarks);
+                
+                // Draw debug points if needed (uncomment for debugging)
+                // drawDebugPoints(landmarks);
             }
         }
         
-        // Draw glasses on the face
+        // Draw debug points for testing
+        function drawDebugPoints(landmarks) {
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+            for (let i = 0; i < landmarks.length; i++) {
+                if (i % 10 === 0) { // Draw every 10th point to avoid clutter
+                    const x = landmarks[i].x * canvas.width;
+                    const y = landmarks[i].y * canvas.height;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // Add numbers to key points
+                    if (i === LANDMARK_INDICES.LEFT_EYE_CENTER || 
+                        i === LANDMARK_INDICES.RIGHT_EYE_CENTER ||
+                        i === LANDMARK_INDICES.NOSE_TIP) {
+                        ctx.fillStyle = 'white';
+                        ctx.font = '10px Arial';
+                        ctx.fillText(i, x + 5, y);
+                        ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+                    }
+                }
+            }
+        }
+        
+        // Draw glasses on the face with 3D adjustments
         function drawGlasses(landmarks) {
-            const leftEye = landmarks[LANDMARK_INDICES.LEFT_EYE[0]];
-            const rightEye = landmarks[LANDMARK_INDICES.RIGHT_EYE[0]];
+            const leftEyeCenter = landmarks[LANDMARK_INDICES.LEFT_EYE_CENTER];
+            const rightEyeCenter = landmarks[LANDMARK_INDICES.RIGHT_EYE_CENTER];
             const noseTip = landmarks[LANDMARK_INDICES.NOSE_TIP];
             const leftTemple = landmarks[LANDMARK_INDICES.LEFT_TEMPLE];
             const rightTemple = landmarks[LANDMARK_INDICES.RIGHT_TEMPLE];
+            const noseBottom = landmarks[LANDMARK_INDICES.NOSE_BOTTOM];
             
             // Calculate position and size based on facial landmarks
             const eyeDistance = Math.sqrt(
-                Math.pow(rightEye.x - leftEye.x, 2) + 
-                Math.pow(rightEye.y - leftEye.y, 2)
+                Math.pow(rightEyeCenter.x - leftEyeCenter.x, 2) + 
+                Math.pow(rightEyeCenter.y - leftEyeCenter.y, 2)
             );
             
-            // Calculate center point between eyes
-            const centerX = (leftEye.x + rightEye.x) / 2;
-            const centerY = (leftEye.y + rightEye.y) / 2;
+            // Calculate center point between eyes with vertical adjustment
+            const centerX = (leftEyeCenter.x + rightEyeCenter.x) / 2;
+            const centerY = (leftEyeCenter.y + rightEyeCenter.y) / 2 + adjustmentParams.vertical;
             
             // Calculate angle of rotation based on eye positions
-            const angle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+            const angle = Math.atan2(rightEyeCenter.y - leftEyeCenter.y, rightEyeCenter.x - leftEyeCenter.x);
             
-            // Calculate width based on distance between temples with some padding
+            // Calculate width based on distance between temples with size adjustment
             const templeDistance = Math.sqrt(
                 Math.pow(rightTemple.x - leftTemple.x, 2) + 
                 Math.pow(rightTemple.y - leftTemple.y, 2)
             );
             
-            const glassesWidth = templeDistance * canvas.width * 1.4;
-            const glassesHeight = glassesWidth * 0.4; // Aspect ratio of glasses
+            // Apply depth adjustment to create 3D perspective effect
+            const depthEffect = 1 + (1 - adjustmentParams.depth) * 0.3;
+            
+            const glassesWidth = templeDistance * canvas.width * 1.4 * adjustmentParams.size * depthEffect;
+            const glassesHeight = glassesWidth * 0.4 * adjustmentParams.size; // Aspect ratio of glasses
             
             // Save the current context
             ctx.save();
@@ -400,6 +499,10 @@
             
             // Rotate the context
             ctx.rotate(angle);
+            
+            // Apply perspective transformation for 3D effect
+            const perspective = 0.5 + (adjustmentParams.depth * 0.5);
+            ctx.transform(perspective, 0, -0.1 * (1 - perspective), 1, 0, 0);
             
             // Draw the glasses image
             const glassesImg = glassesImages[currentGlasses];
@@ -421,6 +524,7 @@
         function setupEventListeners() {
             document.getElementById('startButton').addEventListener('click', startCamera);
             document.getElementById('stopButton').addEventListener('click', stopCamera);
+            document.getElementById('resetButton').addEventListener('click', resetAdjustments);
             
             // Add event listeners for glass options
             const glassOptions = document.querySelectorAll('.glass-option');
@@ -436,6 +540,32 @@
                     currentGlasses = option.dataset.glasses;
                 });
             });
+            
+            // Add event listeners for adjustment sliders
+            document.getElementById('sizeSlider').addEventListener('input', (e) => {
+                adjustmentParams.size = parseFloat(e.target.value);
+            });
+            
+            document.getElementById('verticalSlider').addEventListener('input', (e) => {
+                adjustmentParams.vertical = parseFloat(e.target.value);
+            });
+            
+            document.getElementById('depthSlider').addEventListener('input', (e) => {
+                adjustmentParams.depth = parseFloat(e.target.value);
+            });
+        }
+        
+        // Reset adjustment parameters to default
+        function resetAdjustments() {
+            adjustmentParams = {
+                size: 1.0,
+                vertical: 0.0,
+                depth: 1.0
+            };
+            
+            document.getElementById('sizeSlider').value = 1.0;
+            document.getElementById('verticalSlider').value = 0.0;
+            document.getElementById('depthSlider').value = 1.0;
         }
         
         // Initialize the application
